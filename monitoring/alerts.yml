@@ -1,0 +1,39 @@
+groups:
+  - name: walletdna_alerts
+    rules:
+
+      - alert: HighAPIErrorRate
+        expr: rate(walletdna_api_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate on {{ $labels.chain }}"
+          description: "API error rate is {{ $value | humanize }} errors/sec"
+
+      - alert: IngestionStalled
+        expr: rate(walletdna_transactions_ingested_total[15m]) == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ingestion stalled — no transactions in 15 minutes"
+          description: "Check chain adapter and API key validity"
+
+      - alert: HighBotClusterDetected
+        expr: walletdna_clusters_detected > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} wallet cluster(s) detected"
+          description: "Coordinated wallet behaviour cluster identified"
+
+      - alert: LowDNAConfidence
+        expr: histogram_quantile(0.5, walletdna_dna_confidence) < 0.4
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low DNA confidence scores"
+          description: "Median confidence below 0.4 — wallets may have insufficient tx history"

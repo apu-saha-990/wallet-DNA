@@ -1,0 +1,101 @@
+services:
+  # ─── Database ───────────────────────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: walletdna_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: walletdna
+      POSTGRES_USER: walletdna
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-walletdna_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./walletdna/storage/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U walletdna -d walletdna"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Prometheus ─────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: walletdna_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+
+  # ─── Grafana ────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: walletdna_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/walletdna.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  # ─── Alertmanager ───────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: walletdna_alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    ports:
+      - "9093:9093"
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+
+  # ─── WalletDNA App ──────────────────────────────────────────
+  walletdna:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: walletdna_app
+    restart: unless-stopped
+    environment:
+      - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY}
+      - TRONSCAN_API_KEY=${TRONSCAN_API_KEY:-}
+      - DOGECHAIN_API_KEY=${DOGECHAIN_API_KEY:-}
+      - DATABASE_URL=postgresql://walletdna:${POSTGRES_PASSWORD:-walletdna_secret}@postgres:5432/walletdna
+      - PROMETHEUS_PORT=8000
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
