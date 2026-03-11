@@ -3,10 +3,11 @@
     { "address": "0xD038A997444Db594BBE62AAad8B4735584D8db2d", "label": "Primary Wallet" },
     { "address": "0x3B18DD8653EddC873FcFE4601353b5DCAe4Ac85D", "label": "Large DoubleUp" },
     { "address": "0xb4Bf4E2168b8cbEdE6B7ea5eb2334C988d47D0e1", "label": "Medium Wallet" },
-    { "address": "0xD86a53FEDFACCBA2e080C0Ea1DD831E0FCEacd90", "label": "Tiny Wallet" }
+    { "address": "0xD86a53FEDFACCBA2e080C0Ea1DD831E0FCEacd90", "label": "Tiny Wallet" },
+    { "address": "0xE40BD3d16AF3dbea6Ed781ebAC22e0f9A21a416c", "label": "Transferred Wallet" }
   ],
   "suspect_wallets": [
-    { "address": "0xE40BD3d16AF3dbea6Ed781ebAC22e0f9A21a416c", "label": "Suspect #1" },
+    { "address": "SUSPECT_ADDRESS_1", "label": "Suspect #1" },
     { "address": "SUSPECT_ADDRESS_2", "label": "Suspect #2" },
     { "address": "SUSPECT_ADDRESS_3", "label": "Suspect #3" },
     { "address": "SUSPECT_ADDRESS_4", "label": "Suspect #4" },
