@@ -187,7 +187,7 @@ class TronAdapter(BaseAdapter):
             block_time = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
             from_addr  = raw.get("ownerAddress", "")
             to_addr    = raw.get("toAddress", "")
-            value_sun  = raw.get("amount", 0)      # 1 TRX = 1,000,000 SUN
+            value_sun  = int(raw.get("amount", 0) or 0)      # 1 TRX = 1,000,000 SUN
             energy     = raw.get("energyUsage", 0)
             bandwidth  = raw.get("netUsage", 0)
 
@@ -245,7 +245,7 @@ class TronAdapter(BaseAdapter):
                 from_address = raw.get("ownerAddress", ""),
                 to_address   = raw.get("toAddress", ""),
                 direction    = "out",
-                value_native = raw.get("amount", 0) / 1_000_000,
+                value_native = int(raw.get("amount", 0) or 0) / 1_000_000,
             )
         except Exception as e:
             logger.warning("trx_parse_info_failed", error=str(e))

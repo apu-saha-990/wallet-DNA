@@ -36,6 +36,8 @@ from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
+from dotenv import load_dotenv
+load_dotenv()
 
 console = Console()
 
@@ -300,12 +302,42 @@ async def ingest_live(address: str, chain: str) -> Optional[dict]:
 
         dna_display = _parse_dna_string(profile.dna_string or "")
 
+        # Compute total native volume (all directions, native + token)
+        total_native = sum(
+            float(t.value_native) for t in txs if t.value_native
+        )
+        api_limit_hit = len(txs) >= 9999
+        chain_sym = {"ETH": "ETH", "TRX": "TRX", "DOGE": "DOGE"}.get(chain.upper(), chain.upper())
+
+        # Fetch USD price
+        usd_price = 0.0
+        try:
+            import urllib.request, json as _json
+            coin_id = {"ETH": "ethereum", "TRX": "tron", "DOGE": "dogecoin"}.get(chain.upper(), "ethereum")
+            url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
+            with urllib.request.urlopen(url, timeout=5) as r:
+                usd_price = _json.loads(r.read())[coin_id]["usd"]
+        except Exception:
+            pass
+
+        total_usd = total_native * usd_price
+        if total_usd > 0:
+            value_str = f"{total_native:,.2f} {chain_sym} (${total_usd:,.0f} USD)"
+        elif total_native > 0:
+            value_str = f"{total_native:,.4f} {chain_sym}"
+        else:
+            value_str = "live"
+
         result = {
             "address":          address,
             "chain":            chain,
             "label":            None,
             "tx_count":         profile.tx_count,
-            "value_display":    "live",
+            "total_native":     round(total_native, 4),
+            "total_usd":        round(total_usd, 2),
+            "total_eth":        round(total_native, 4),
+            "api_limit_hit":    api_limit_hit,
+            "value_display":    value_str,
             "wallet_class":     profile.classification.wallet_class.value if profile.classification else "UNKNOWN",
             "bot_confidence":   profile.classification.confidence if profile.classification else 0.0,
             "confidence_score": profile.confidence_score,
@@ -337,9 +369,10 @@ def render_investigation_summary(
 
     wclass = target.get("wallet_class", "UNKNOWN")
     bconf  = float(target.get("bot_confidence", 0.5))
-
+    cscore = float(target.get("confidence_score", 0.0))
+    display_conf = cscore if cscore > 0 else (1.0 - bconf) if "HUMAN" in wclass else bconf
+    conf_pct = f"{int(display_conf * 100)}%"
     risk_str, risk_col = risk_level(bconf)
-    conf_pct = f"{int(bconf * 100)}%"
 
     # Classification colour
     if "BOT" in wclass and "LIKELY" not in wclass:
@@ -409,7 +442,17 @@ def render_investigation_summary(
 
     t.add_row("Analysis ID",    Text(analysis_id,               style=f"bold {BLUE}"))
     t.add_row("Target wallet",  Text(f"{short}  ·  {label}",    style=f"bold {BLUE}"))
-    t.add_row("Chain",          Text(f"{chain}  ·  {txns} transactions", style=f"bold {BLUE}"))
+    total_eth     = target.get("total_eth")
+    api_limit_hit = target.get("api_limit_hit", False)
+    chain_upper   = chain.upper()
+    native_sym    = "ETH" if chain_upper == "ETH" else "TRX" if chain_upper == "TRX" else "DOGE" if chain_upper == "DOGE" else "native"
+    volume_str    = f"  ·  {total_eth:.4f} {native_sym} outbound" if total_eth else ""
+    api_warn_str  = "  ⚠ API LIMIT — capped at 10,000 txns" if api_limit_hit else ""
+    chain_t = Text()
+    chain_t.append(f"{chain}  ·  {txns} transactions{volume_str}", style=f"bold {BLUE}")
+    if api_warn_str:
+        chain_t.append(api_warn_str, style=f"bold {AMBER}")
+    t.add_row("Chain", chain_t)
     t.add_row("Classification", Text(wclass,                    style=f"bold {class_col}"))
 
     risk_t = Text()
@@ -488,11 +531,13 @@ def render_table1(profile: dict) -> Panel:
         Align.center(dna_line(dna)),
     )
 
-    short = f"{addr[:10]}...{addr[-6:]}"
+    short    = f"{addr[:10]}...{addr[-6:]}"
+    api_warn = profile.get("api_limit_hit", False)
+    api_note = f"  ·  [bold #F4A261]⚠ API limit hit — actual volume is higher[/bold #F4A261]" if api_warn else ""
     return Panel(
         content,
         title=f"[bold {BLUE}]⚙  TABLE 1 — DNA GENERATION[/bold {BLUE}]  [{GREY}]{short}  ·  {label}[/{GREY}]",
-        subtitle=f"[{GREY}]{txns} transactions  ·  {chain}  ·  {value}[/{GREY}]",
+        subtitle=f"[{GREY}]{txns} transactions  ·  {chain}  ·  {value}[/{GREY}]{api_note}",
         border_style=BLUE, style="on #0D1117", padding=(0, 1),
     )
 
@@ -829,11 +874,10 @@ def main():
 
     # Fallback to demo
     if not target_profile:
-        target_profile = DEMO_SUSPECT_WALLET.copy()
+        target_profile = DEMO_YOUR_WALLET.copy()
         target_profile["source"] = "demo"
 
-    if not suspect_profiles:
-        suspect_profiles = [DEMO_SUSPECT_WALLET.copy()]
+    # No demo fallback for suspects — show empty state instead
 
     # Find your wallet for Table 2
     your_profile = None
@@ -855,8 +899,14 @@ def main():
     console.print()
     console.print(render_table1(target_profile))
     console.print()
-    console.print(render_table2(your_profile, target_profile))
-    console.print()
+    if suspect_profiles:
+        console.print(render_table2(your_profile, suspect_profiles[0]))
+        console.print()
+    else:
+        from rich.panel import Panel
+        from rich.text import Text
+        console.print(Panel(Text("No suspect profiles loaded — add suspect addresses to wallets.json to enable comparison.", style="#888888"), title="[bold #F4A261]⚖  TABLE 2 — COMPARISON[/bold #F4A261]", border_style="#F4A261", style="on #0D1117", padding=(1,2)))
+        console.print()
     console.print(render_table3(suspect_profiles))
     console.print()
     console.rule(f"[{GREY}]Analysis complete[/{GREY}]", style=DARK)
