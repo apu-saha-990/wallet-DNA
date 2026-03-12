@@ -290,7 +290,7 @@ class FeatureExtractor:
         if self.chain == Chain.DOGECOIN:
             return ContractFeature(
                 dex_ratio=0, bridge_ratio=0, eoa_ratio=1.0,
-                top_type="N/A-UTXO",
+                top_type="UTXO-CHAIN",
                 score=0.5, confidence=1.0,
                 not_applicable=True,
             )
@@ -372,7 +372,7 @@ class FeatureExtractor:
             return MempoolFeature(
                 avg_wait_blocks=1.0,
                 instant_ratio=0.5,
-                label="N/A-UTXO",
+                label="UTXO-CHAIN",
                 score=0.5,
                 confidence=1.0,
                 not_applicable=True,

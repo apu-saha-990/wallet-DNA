@@ -1,0 +1,59 @@
+{
+  "address": "TVM6KuxBFpVQcUdjDb9vAvxxBtB2bFfpRr",
+  "chain": "TRX",
+  "label": null,
+  "tx_count": 5486,
+  "total_native": 52566696.0019,
+  "total_usd": 15201710.25,
+  "total_eth": 52566696.0019,
+  "api_limit_hit": false,
+  "value_display": "52,566,696.00 TRX ($15,201,710 USD)",
+  "wallet_class": "LIKELY_HUMAN",
+  "bot_confidence": 0.3846,
+  "confidence_score": 1.0,
+  "dna_string": "G:MED-MODERATE | T:1300-1300UTC | V:SPLIT-MED-PRECISE | C:TRANSFER-MIX | M:UNKNOWN | A:STEADY | X:LIKELY_HUMAN-LOW",
+  "dna_vector": [
+    0.5,
+    0.5,
+    0.0024,
+    0.0,
+    0.5,
+    0.0,
+    0.0,
+    0.5,
+    0.1997,
+    0.9932
+  ],
+  "dna": {
+    "G": [
+      "MED-MODERATE",
+      "#39D353"
+    ],
+    "T": [
+      "1300-1300UTC",
+      "#39D353"
+    ],
+    "V": [
+      "SPLIT-MED-PRECISE",
+      "#F4A261"
+    ],
+    "C": [
+      "TRANSFER-MIX",
+      "#39D353"
+    ],
+    "M": [
+      "UNKNOWN",
+      "#39D353"
+    ],
+    "A": [
+      "STEADY",
+      "#39D353"
+    ],
+    "X": [
+      "LIKELY_HUMAN-LOW",
+      "#90EE90"
+    ]
+  },
+  "source": "live",
+  "saved_at": "2026-03-11T13:39:32.262455+00:00"
+}

@@ -1,0 +1,57 @@
+{
+  "address": "0x4c39ed0438d5e8913acf423db6d56cce78b2d367",
+  "chain": "ETH",
+  "label": null,
+  "tx_count": 10000,
+  "total_eth": 1295976.7096,
+  "api_limit_hit": true,
+  "value_display": "1295976.7096 ETH",
+  "wallet_class": "LIKELY_HUMAN",
+  "bot_confidence": 0.3077,
+  "confidence_score": 1.0,
+  "dna_string": "G:LOW-ERRATIC | T:1500-2000UTC | V:SPLIT-HIGH-PRECISE | C:EOA-DOMINANT | M:SLOW | A:STEADY | X:LIKELY_HUMAN-LOW",
+  "dna_vector": [
+    1.0,
+    1.0,
+    0.9927,
+    0.208333,
+    0.1305,
+    0.3235,
+    0.0,
+    0.0,
+    0.084,
+    0.0
+  ],
+  "dna": {
+    "G": [
+      "LOW-ERRATIC",
+      "#39D353"
+    ],
+    "T": [
+      "1500-2000UTC",
+      "#39D353"
+    ],
+    "V": [
+      "SPLIT-HIGH-PRECISE",
+      "#F4A261"
+    ],
+    "C": [
+      "EOA-DOMINANT",
+      "#39D353"
+    ],
+    "M": [
+      "SLOW",
+      "#39D353"
+    ],
+    "A": [
+      "STEADY",
+      "#39D353"
+    ],
+    "X": [
+      "LIKELY_HUMAN-LOW",
+      "#90EE90"
+    ]
+  },
+  "source": "live",
+  "saved_at": "2026-03-11T10:27:32.131875+00:00"
+}

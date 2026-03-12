@@ -1,12 +1,10 @@
 """
 WalletDNA — Dogecoin Adapter
-Fetches transaction history via Blockchair API.
+Fetches transaction history via Blockcypher API (free, no key required).
 UTXO chain — inputs/outputs model, no smart contracts.
 """
-
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -18,20 +16,15 @@ from walletdna.engine.models import Chain, NormalisedTx
 
 logger = structlog.get_logger(__name__)
 
+# Blockcypher free tier: 3 req/sec, 200 req/hr
+BASE_URL = "https://api.blockcypher.com/v1/doge/main"
+
 
 class DogecoinAdapter(BaseAdapter):
+    chain = Chain.DOGECOIN
 
-    chain    = Chain.DOGECOIN
-    BASE_URL = "https://api.blockchair.com/dogecoin"
-
-    def __init__(
-        self,
-        api_key:          Optional[str] = None,
-        calls_per_minute: float         = 25.0,  # Conservative on free tier
-    ):
-        self.api_key = api_key or os.getenv("DOGECHAIN_API_KEY", "")
-        # Blockchair rate limit is per minute — convert to per second
-        self._rate_limiter = RateLimiter(calls_per_minute / 60.0)
+    def __init__(self, calls_per_second: float = 2.0):
+        self._rate_limiter = RateLimiter(calls_per_second)
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -45,205 +38,146 @@ class DogecoinAdapter(BaseAdapter):
             await self._session.close()
 
     async def _api_call(self, endpoint: str, params: Optional[dict] = None) -> dict:
-        url = f"{self.BASE_URL}/{endpoint}"
-        p   = params or {}
-        if self.api_key:
-            p["key"] = self.api_key
+        await self._rate_limiter.acquire()
+        session = await self._get_session()
+        url = f"{BASE_URL}/{endpoint}"
+        async with session.get(url, params=params or {}) as resp:
+            if resp.status != 200:
+                raise aiohttp.ClientResponseError(
+                    resp.request_info, resp.history,
+                    status=resp.status, message=f"Blockcypher error {resp.status}"
+                )
+            return await resp.json()
 
-        async def _fetch():
-            session = await self._get_session()
-            async with session.get(url, params=p) as resp:
-                resp.raise_for_status()
-                return await resp.json()
-
-        return await self._fetch_with_retry(_fetch)
-
-    # ─── Public Interface ─────────────────────────────────────────────────────
-
-    async def get_transactions(
-        self,
-        address:     str,
-        start_block: Optional[int] = None,
-        end_block:   Optional[int] = None,
-        max_txs:     int           = 5_000,
-    ) -> list[NormalisedTx]:
+    async def get_transactions(self, address: str) -> list[NormalisedTx]:
         logger.info("doge_fetching_txs", address=address[:12])
+        txs: list[NormalisedTx] = []
+        before = None  # cursor for pagination
 
-        txs    = []
-        offset = 0
-        limit  = 100
+        try:
+            while True:
+                params = {"limit": 50, "includeHex": "false"}
+                if before:
+                    params["before"] = before
 
-        while len(txs) < max_txs:
-            data = await self._api_call(
-                f"dashboards/address/{address}",
-                {
-                    "limit":            f"{limit},0",
-                    "offset":           f"{offset},0",
-                    "transaction_details": "true",
-                },
-            )
+                data = await self._api_call(f"addrs/{address}/full", params)
+                raw_txs = data.get("txs", [])
+                if not raw_txs:
+                    break
 
-            addr_data = data.get("data", {}).get(address.lower(), {})
-            tx_hashes = addr_data.get("transactions", [])
+                for raw in raw_txs:
+                    parsed = self._parse_tx(raw, address)
+                    if parsed:
+                        txs.append(parsed)
 
-            if not tx_hashes:
-                break
+                # Pagination — Blockcypher returns hasMore flag
+                if not data.get("hasMore", False):
+                    break
 
-            # Fetch tx details in batches of 10 (Blockchair limit)
-            batch_size = 10
-            for i in range(0, len(tx_hashes), batch_size):
-                batch_hashes = tx_hashes[i:i + batch_size]
-                batch_txs    = await self._fetch_tx_batch(batch_hashes, address)
-                txs.extend(batch_txs)
+                # Set cursor to block height of last tx for next page
+                last = raw_txs[-1]
+                before = last.get("block_height", 0)
 
-            if len(tx_hashes) < limit:
-                break
-            offset += limit
+                # Safety cap — DOGE wallets can be enormous
+                if len(txs) >= 2000:
+                    logger.info("doge_tx_cap_reached", address=address[:12], count=len(txs))
+                    break
 
-        txs.sort(key=lambda t: t.block_time)
+        except Exception as e:
+            logger.warning("doge_fetch_failed", address=address[:12], error=str(e))
 
-        logger.info(
-            "doge_fetch_complete",
-            address=address[:12],
-            tx_count=len(txs),
-        )
-
-        return txs[:max_txs]
-
-    async def _fetch_tx_batch(
-        self, tx_hashes: list[str], wallet_address: str
-    ) -> list[NormalisedTx]:
-        if not tx_hashes:
-            return []
-
-        hashes_str = ",".join(tx_hashes)
-        data = await self._api_call(f"dashboards/transactions/{hashes_str}")
-
-        txs = []
-        for tx_hash, tx_data in data.get("data", {}).items():
-            tx = self._parse_utxo_tx(tx_data, wallet_address)
-            if tx:
-                txs.append(tx)
+        logger.info("doge_fetch_complete", address=address[:12], tx_count=len(txs))
         return txs
 
-    async def resolve_tx_hash(self, tx_hash: str) -> Optional[NormalisedTx]:
-        data = await self._api_call(f"dashboards/transaction/{tx_hash}")
-        tx_data = data.get("data", {}).get(tx_hash)
-        if not tx_data:
-            return None
-        return self._parse_utxo_tx(tx_data, "")
-
     def is_valid_address(self, address: str) -> bool:
-        return (
-            isinstance(address, str)
-            and address.startswith("D")
-            and len(address) in (33, 34)
-            and address.isalnum()
-        )
+        return address.startswith("D") and 33 <= len(address) <= 34
 
     async def get_wallet_age_days(self, address: str) -> Optional[float]:
-        data      = await self._api_call(f"dashboards/address/{address}")
-        addr_data = data.get("data", {}).get(address.lower(), {})
-        addr_info = addr_data.get("address", {})
-
-        first_seen = addr_info.get("first_seen_receiving")
-        if not first_seen:
+        try:
+            data = await self._api_call(f"addrs/{address}")
+            txs  = data.get("n_tx", 0)
+            return float(txs)  # proxy — not actual age
+        except Exception:
             return None
 
-        first_dt = datetime.fromisoformat(first_seen.replace("Z", "+00:00"))
-        age = (datetime.now(tz=timezone.utc) - first_dt).total_seconds() / 86400
-        return round(age, 2)
-
-    # ─── Parser ───────────────────────────────────────────────────────────────
-
-    def _parse_utxo_tx(self, tx_data: dict, wallet_address: str) -> Optional[NormalisedTx]:
-        """
-        UTXO transaction parsing.
-        Determines direction by checking if wallet address appears in inputs or outputs.
-        """
+    async def resolve_tx_hash(self, tx_hash: str) -> Optional[NormalisedTx]:
         try:
-            tx          = tx_data.get("transaction", {})
-            inputs      = tx_data.get("inputs", [])
-            outputs     = tx_data.get("outputs", [])
+            data = await self._api_call(f"txs/{tx_hash}")
+            return self._parse_tx(data, "")
+        except Exception:
+            return None
 
-            tx_hash    = tx.get("hash", "")
-            time_str   = tx.get("time", "")
-            block_id   = tx.get("block_id")
-            fee_sat    = tx.get("fee", 0)
+    def _parse_tx(self, raw: dict, wallet_address: str) -> Optional[NormalisedTx]:
+        try:
+            addr_lower = wallet_address.lower()
 
-            block_time = datetime.fromisoformat(
-                time_str.replace("Z", "+00:00")
-            ) if time_str else datetime.now(tz=timezone.utc)
+            # Timestamp
+            confirmed = raw.get("confirmed")
+            received  = raw.get("received")
+            if confirmed:
+                block_time = datetime.fromisoformat(confirmed.replace("Z", "+00:00"))
+            elif received:
+                block_time = datetime.fromisoformat(received.replace("Z", "+00:00"))
+            else:
+                block_time = datetime.now(tz=timezone.utc)
 
-            # Determine direction from UTXO perspective
-            wallet_lower  = wallet_address.lower()
-            input_addrs   = {
-                inp.get("recipient", "").lower()
+            # Determine direction and value from inputs/outputs
+            inputs  = raw.get("inputs", [])
+            outputs = raw.get("outputs", [])
+
+            # Check if wallet is in inputs (sending)
+            sent_from_wallet = any(
+                addr_lower in [a.lower() for a in (inp.get("addresses") or [])]
                 for inp in inputs
-            }
-            output_addrs  = {
-                out.get("recipient", "").lower()
-                for out in outputs
-            }
-
-            is_sender   = wallet_lower in input_addrs
-            is_receiver = wallet_lower in output_addrs
-
-            if is_sender and is_receiver:
-                direction = "self"
-            elif is_sender:
-                direction = "out"
-            else:
-                direction = "in"
-
-            # Calculate value relevant to wallet
-            if direction == "out":
-                # Sum outputs NOT going back to sender (change)
-                value_sat = sum(
-                    out.get("value", 0)
-                    for out in outputs
-                    if out.get("recipient", "").lower() != wallet_lower
-                )
-                # Primary counterparty
-                other_addrs = [
-                    out.get("recipient", "")
-                    for out in outputs
-                    if out.get("recipient", "").lower() != wallet_lower
-                ]
-            else:
-                # Sum outputs going to wallet
-                value_sat = sum(
-                    out.get("value", 0)
-                    for out in outputs
-                    if out.get("recipient", "").lower() == wallet_lower
-                )
-                other_addrs = [
-                    inp.get("recipient", "")
-                    for inp in inputs
-                ]
-
-            # Primary counterparty address
-            to_addr   = other_addrs[0] if other_addrs else ""
-            from_addr = wallet_address if is_sender else (
-                inputs[0].get("recipient", "") if inputs else ""
             )
 
-            # 1 DOGE = 100,000,000 satoshis
-            value_doge = value_sat / 1e8
-            fee_doge   = fee_sat / 1e8
+            # Value received by wallet
+            received_value = sum(
+                int(out.get("value", 0))
+                for out in outputs
+                if addr_lower in [a.lower() for a in (out.get("addresses") or [])]
+            )
+
+            # Value sent from wallet
+            sent_value = sum(
+                int(inp.get("output_value", 0))
+                for inp in inputs
+                if addr_lower in [a.lower() for a in (inp.get("addresses") or [])]
+            )
+
+            direction    = "out" if sent_from_wallet else "in"
+            value_native = (sent_value - received_value) / 1e8 if sent_from_wallet else received_value / 1e8
+            value_native = max(0.0, value_native)
+
+            # Fee
+            fees = int(raw.get("fees", 0))
+            fee_native = fees / 1e8
+
+            # Gas price proxy — DOGE uses flat fees, use fee as proxy
+            gas_price_gwei = fee_native * 1e9 if fee_native > 0 else 1.0
+
+            # From/to addresses
+            from_addrs = [a for inp in inputs for a in (inp.get("addresses") or [])]
+            to_addrs   = [a for out in outputs for a in (out.get("addresses") or [])]
+
+            from_address = from_addrs[0].lower() if from_addrs else ""
+            to_address   = to_addrs[0].lower()   if to_addrs   else ""
 
             return NormalisedTx(
-                tx_hash      = tx_hash,
-                chain        = Chain.DOGECOIN,
-                block_number = block_id,
-                block_time   = block_time,
-                from_address = from_addr.lower(),
-                to_address   = to_addr.lower(),
-                direction    = direction,
-                value_native = value_doge,
-                fee_native   = fee_doge,
-                # DOGE has no contracts — these stay None/False
-                is_contract_call = False,
+                tx_hash             = raw.get("hash", ""),
+                chain               = Chain.DOGECOIN,
+                block_number        = int(raw.get("block_height", 0) or 0),
+                block_time          = block_time,
+                from_address        = from_address,
+                to_address          = to_address,
+                direction           = direction,
+                value_native        = value_native,
+                fee_native          = fee_native,
+                gas_price_gwei      = gas_price_gwei,
+                gas_used            = 0,
+                gas_limit           = 0,
+                is_contract_call    = False,
+                confirmation_blocks = int(raw.get("confirmations", 0) or 0),
             )
 
         except Exception as e:

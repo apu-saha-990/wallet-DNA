@@ -852,7 +852,10 @@ def main():
                 if target_profile:
                     console.print(f"  [bold {GREEN}]✓ live data loaded ({target_profile.get('tx_count', '?')} txns)[/bold {GREEN}]")
                 else:
-                    console.print(f"  [{AMBER}]⚠  Live ingestion failed — add ETHERSCAN_API_KEY to .env[/{AMBER}]")
+                    if chain.upper() == "ETH":
+                        console.print(f"  [{AMBER}]⚠  Live ingestion failed — check ETHERSCAN_API_KEY in .env[/{AMBER}]")
+                    else:
+                        console.print(f"  [{AMBER}]⚠  Insufficient data — wallet has too few transactions to generate DNA profile[/{AMBER}]")
             except Exception as e:
                 console.print(f"  [{AMBER}]⚠  {str(e)[:80]}[/{AMBER}]")
 
@@ -874,8 +877,25 @@ def main():
 
     # Fallback to demo
     if not target_profile:
-        target_profile = DEMO_YOUR_WALLET.copy()
-        target_profile["source"] = "demo"
+        if address:
+            # Show a minimal profile for low-tx wallets instead of demo
+            target_profile = {
+                "address":       address,
+                "chain":         chain if "chain" in dir() else "UNKNOWN",
+                "label":         "Input Wallet",
+                "tx_count":      0,
+                "wallet_class":  "UNKNOWN",
+                "bot_confidence": 0.0,
+                "confidence_score": 0.0,
+                "dna_string":    "INSUFFICIENT_DATA",
+                "dna_vector":    None,
+                "source":        "insufficient_data",
+                "total_native":  0,
+                "total_usd":     0,
+            }
+        else:
+            target_profile = DEMO_YOUR_WALLET.copy()
+            target_profile["source"] = "demo"
 
     # No demo fallback for suspects — show empty state instead
 

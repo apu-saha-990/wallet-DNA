@@ -184,7 +184,7 @@ class DNAComposer:
         # C — Contract Preference
         if contract:
             if contract.not_applicable:
-                parts.append("C:N/A-UTXO")
+                parts.append("C:UTXO-CHAIN")
             else:
                 parts.append(f"C:{contract.top_type}")
         else:
@@ -193,7 +193,7 @@ class DNAComposer:
         # M — Mempool Behaviour
         if mempool:
             if mempool.not_applicable:
-                parts.append("M:N/A-UTXO")
+                parts.append("M:UTXO-CHAIN")
             else:
                 parts.append(f"M:{mempool.label}")
         else:

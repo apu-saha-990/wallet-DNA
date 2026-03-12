@@ -1,0 +1,59 @@
+{
+  "address": "DNHz79fALnTQwbWEuYxbXDceK64hqq2zet",
+  "chain": "DOGE",
+  "label": null,
+  "tx_count": 6,
+  "total_native": 1578.412,
+  "total_usd": 149.0,
+  "total_eth": 1578.412,
+  "api_limit_hit": false,
+  "value_display": "1,578.41 DOGE ($149 USD)",
+  "wallet_class": "HUMAN",
+  "bot_confidence": 0.0,
+  "confidence_score": 0.06,
+  "dna_string": "G:N/A | T:00-23UTC | V:SPLIT-MED-PRECISE | C:UTXO-CHAIN | M:UTXO-CHAIN | A:STEADY | X:HUMAN-LOW",
+  "dna_vector": [
+    0.5,
+    0.5,
+    1.0,
+    0.958333,
+    0.2012,
+    0.0,
+    0.0,
+    0.5,
+    0.3,
+    0.3
+  ],
+  "dna": {
+    "G": [
+      "N/A",
+      "#39D353"
+    ],
+    "T": [
+      "00-23UTC",
+      "#39D353"
+    ],
+    "V": [
+      "SPLIT-MED-PRECISE",
+      "#F4A261"
+    ],
+    "C": [
+      "UTXO-CHAIN",
+      "#39D353"
+    ],
+    "M": [
+      "UTXO-CHAIN",
+      "#39D353"
+    ],
+    "A": [
+      "STEADY",
+      "#39D353"
+    ],
+    "X": [
+      "HUMAN-LOW",
+      "#39D353"
+    ]
+  },
+  "source": "live",
+  "saved_at": "2026-03-12T11:29:06.241687+00:00"
+}
