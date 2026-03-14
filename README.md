@@ -31,7 +31,13 @@ Load a batch of wallets into a case. The engine compares every wallet against ev
 
 ## Why This Project Matters
 
-This was built during a real investigation into a BDAG presale fraud. Hundreds of wallets, different addresses, different chains. On a block explorer they look unrelated. When you run WalletDNA across them, the clusters emerge. Two wallets scored 0.997 similarity — near-identical behaviour across all 7 dimensions. That's not a coincidence. That's one operator running multiple collection addresses.
+This was built during a real investigation into a BDAG presale fraud. A group of collection wallets across ETH and TRX — different addresses, different chains. On a block explorer they look unrelated.
+
+When you run WalletDNA across them, the clusters emerge.
+
+Four TRX collection wallets scored 1.000 similarity — perfect behavioural match across all 7 dimensions. Same gas pattern. Same 1-hour active window. Same value fragmentation. Same activity cycle. Different addresses. Same hand operating them.
+
+Multiple ETH wallets scored above 0.92 — several pairs hitting 0.997 and 0.993. That is not a coincidence.
 
 The tool exists because block explorers show you what happened. WalletDNA shows you who is behind it.
 
